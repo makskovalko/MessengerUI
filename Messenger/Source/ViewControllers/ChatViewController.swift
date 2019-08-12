@@ -1,6 +1,6 @@
 import UIKit
 
-class AddRandomMessagesChatViewController: DemoChatViewController {
+final class ChatViewController: DemoChatViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -15,6 +15,6 @@ class AddRandomMessagesChatViewController: DemoChatViewController {
 
     @objc
     private func addRandomMessage() {
-        dataSource.addRandomIncomingMessage()
+        addRandomIncomingMessage()
     }
 }

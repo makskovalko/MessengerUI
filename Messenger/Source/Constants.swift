@@ -6,4 +6,9 @@
 //  Copyright © 2019 Maxim Kovalko. All rights reserved.
 //
 
-import Foundation
+enum Constants {
+    enum Chat {
+        static let messageCount = 10_000
+        static let pageSize = 50
+    }
+}

@@ -1,5 +1,6 @@
 import Foundation
 import Chatto
+import RxSwift
 
 enum InsertPosition {
     case top

@@ -6,4 +6,23 @@
 //  Copyright © 2019 Maxim Kovalko. All rights reserved.
 //
 
-import Foundation
+import Chatto
+
+final class SendingStatusPresenterBuilder: ChatItemPresenterBuilderProtocol {
+    func canHandleChatItem(_ chatItem: ChatItemProtocol) -> Bool {
+        return chatItem is SendingStatusModel ? true : false
+    }
+    
+    func createPresenterWithChatItem(
+        _ chatItem: ChatItemProtocol
+        ) -> ChatItemPresenterProtocol {
+        assert(canHandleChatItem(chatItem))
+        return SendingStatusPresenter(
+            statusModel: chatItem as! SendingStatusModel
+        )
+    }
+    
+    var presenterType: ChatItemPresenterProtocol.Type {
+        return SendingStatusPresenter.self
+    }
+}

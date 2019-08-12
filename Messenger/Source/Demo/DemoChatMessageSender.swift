@@ -1,19 +1,21 @@
 import Foundation
 import Chatto
 import ChattoAdditions
+import RxSwift
 
 public protocol DemoMessageModelProtocol: MessageModelProtocol {
     var status: MessageStatus { get set }
 }
 
-public final class DemoChatMessageSender {
-    public var onMessageChanged: ((_ message: DemoMessageModelProtocol) -> Void)?
+final class DemoChatMessageSender {
+    private(set) var onMessageChanged = PublishSubject<DemoMessageModelProtocol>()
+    private let disposedBag = DisposeBag()
 
-    public func sendMessages(_ messages: [DemoMessageModelProtocol]) {
+    func sendMessages(_ messages: [DemoMessageModelProtocol]) {
         messages.forEach(fakeMessageStatus)
     }
 
-    public func sendMessage(_ message: DemoMessageModelProtocol) {
+    func sendMessage(_ message: DemoMessageModelProtocol) {
         fakeMessageStatus(message)
     }
 
@@ -54,7 +56,7 @@ public final class DemoChatMessageSender {
 
     private func notifyMessageChanged(
         _ message: DemoMessageModelProtocol
-    ) { onMessageChanged?(message) }
+    ) { onMessageChanged.onNext(message) }
     
     private func fakeMessageStatusAfterDelay(
         withMessage message: DemoMessageModelProtocol

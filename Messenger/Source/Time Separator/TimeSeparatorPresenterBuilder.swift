@@ -6,4 +6,20 @@
 //  Copyright © 2019 Maxim Kovalko. All rights reserved.
 //
 
-import Foundation
+import Chatto
+
+final class TimeSeparatorPresenterBuilder: ChatItemPresenterBuilderProtocol {
+    func canHandleChatItem(_ chatItem: ChatItemProtocol) -> Bool {
+        return chatItem is TimeSeparatorModel
+    }
+    
+    func createPresenterWithChatItem(_ chatItem: ChatItemProtocol) -> ChatItemPresenterProtocol {
+        assert(canHandleChatItem(chatItem))
+        guard let timeSeparatorModel = chatItem as? TimeSeparatorModel else { fatalError() }
+        return TimeSeparatorPresenter(timeSeparatorModel: timeSeparatorModel)
+    }
+    
+    var presenterType: ChatItemPresenterProtocol.Type {
+        return TimeSeparatorPresenter.self
+    }
+}

@@ -1,11 +1,14 @@
 import Foundation
 import Chatto
+import RxSwift
 
 final class DemoChatDataSource {
     private var nextMessageId: Int = 0
     private let preferredMaxWindowSize = 500
     private var slidingWindow: SlidingDataSource<ChatItemProtocol>!
     weak var delegate: ChatDataSourceDelegateProtocol?
+    
+    private let disposedBag = DisposeBag()
     
     init(count: Int, pageSize: Int) {
         slidingWindow = SlidingDataSource(
@@ -31,10 +34,12 @@ final class DemoChatDataSource {
 
     lazy var messageSender: DemoChatMessageSender = {
         let sender = DemoChatMessageSender()
-        sender.onMessageChanged = { [weak self] (message) in
+        
+        sender.onMessageChanged.subscribe(onNext: { [weak self] _ in
             guard let sSelf = self else { return }
             sSelf.delegate?.chatDataSourceDidUpdate(sSelf)
-        }
+        }).disposed(by: disposedBag)
+        
         return sender
     }()
 }
@@ -70,7 +75,7 @@ extension DemoChatDataSource: ChatDataSourceProtocol {
         )
     }
     
-    func addTextMessage(_ text: String) {
+    func addTextMessage(_ text: String) -> String {
         nextMessageId += 1
         let message = DemoChatMessageFactory.makeTextMessage(
             "\(nextMessageId)",
@@ -80,9 +85,10 @@ extension DemoChatDataSource: ChatDataSourceProtocol {
         messageSender.sendMessage(message)
         slidingWindow.insertItem(message, position: .bottom)
         delegate?.chatDataSourceDidUpdate(self)
+        return text
     }
     
-    func addPhotoMessage(_ image: UIImage) {
+    func addPhotoMessage(_ image: UIImage) -> UIImage {
         nextMessageId += 1
         let message = DemoChatMessageFactory.makePhotoMessage(
             "\(nextMessageId)",
@@ -93,6 +99,7 @@ extension DemoChatDataSource: ChatDataSourceProtocol {
         messageSender.sendMessage(message)
         slidingWindow.insertItem(message, position: .bottom)
         delegate?.chatDataSourceDidUpdate(self)
+        return image
     }
     
     func addRandomIncomingMessage() {
@@ -112,7 +119,7 @@ extension DemoChatDataSource: ChatDataSourceProtocol {
         preferredMaxCount: Int?,
         focusPosition: Double,
         completion: (_ didAdjust: Bool) -> Void
-        ) {
+    ) {
         let didAdjust = slidingWindow.adjustWindow(
             focusPosition: focusPosition,
             maxWindowSize: preferredMaxCount ?? preferredMaxWindowSize
@@ -123,7 +130,7 @@ extension DemoChatDataSource: ChatDataSourceProtocol {
     func replaceMessage(
         withUID uid: String,
         withNewMessage newMessage: ChatItemProtocol
-        ) {
+    ) {
         let didUpdate = slidingWindow
             .replaceItem(withNewItem: newMessage) { $0.uid == uid }
         

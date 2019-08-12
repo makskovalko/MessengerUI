@@ -3,34 +3,42 @@ import Chatto
 import ChattoAdditions
 
 class DemoChatViewController: BaseChatViewController {
-    var shouldUseAlternativePresenter: Bool = false
-
-    var messageSender: DemoChatMessageSender!
-    var chatInputPresenter: AnyObject!
-    let messagesSelector = BaseMessagesSelector()
-
-    var dataSource: DemoChatDataSource! {
-        didSet {
-            chatDataSource = dataSource
-            messageSender = dataSource.messageSender
-        }
+    private let viewModel: DemoChatViewModelProtocol
+    private let messageSender: DemoChatMessageSender
+    private let messagesSelector: MessagesSelectorProtocol
+    private let dataSource: DemoChatDataSource
+    private let baseMessageHandler: BaseMessageHandler
+    private let chatItemPresenterBuilders: [ChatItemType: [ChatItemPresenterBuilderProtocol]]
+    private var chatInputPresenter: AnyObject!
+    
+    init(viewModel: DemoChatViewModelProtocol,
+         messagesSelector: MessagesSelectorProtocol,
+         dataSource: DemoChatDataSource,
+         chatItemsDecorator: ChatItemsDecoratorProtocol?,
+         messageSender: DemoChatMessageSender,
+         baseMessageHandler: BaseMessageHandler,
+         chatItemPresenterBuilders: [ChatItemType: [ChatItemPresenterBuilderProtocol]]
+    ) {
+        self.viewModel = viewModel
+        self.messagesSelector = messagesSelector
+        self.dataSource = dataSource
+        self.messageSender = messageSender
+        self.baseMessageHandler = baseMessageHandler
+        self.chatItemPresenterBuilders = chatItemPresenterBuilders
+        
+        super.init(nibName: nil, bundle: nil)
+        
+        self.chatItemsDecorator = chatItemsDecorator
+        self.chatDataSource = dataSource
     }
-
-    lazy private var baseMessageHandler: BaseMessageHandler = {
-        return BaseMessageHandler(
-            messageSender: messageSender,
-            messagesSelector: messagesSelector
-        )
-    }()
-
+    
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-
         title = "Chat"
-        messagesSelector.delegate = self
-        chatItemsDecorator = DemoChatItemsDecorator(
-            messagesSelector: messagesSelector
-        )
     }
     
     override func createChatInputView() -> UIView {
@@ -45,111 +53,91 @@ class DemoChatViewController: BaseChatViewController {
             "Type a message",
             comment: ""
         )
-        
-        if shouldUseAlternativePresenter {
-            let chatInputPresenter = ExpandableChatInputBarPresenter(
-                inputPositionController: self,
-                chatInputBar: chatInputView,
-                chatInputItems: createChatInputItems(),
-                chatInputBarAppearance: appearance)
-            self.chatInputPresenter = chatInputPresenter
-            self.keyboardEventsHandler = chatInputPresenter
-            self.scrollViewEventsHandler = chatInputPresenter
-        } else {
-            chatInputPresenter = BasicChatInputBarPresenter(
-                chatInputBar: chatInputView,
-                chatInputItems: createChatInputItems(),
-                chatInputBarAppearance: appearance
-            )
-        }
+        chatInputPresenter = BasicChatInputBarPresenter(
+            chatInputBar: chatInputView,
+            chatInputItems: createChatInputItems(),
+            chatInputBarAppearance: appearance
+        )
         
         chatInputView.maxCharactersCount = 1000
         return chatInputView
     }
 
     override func createPresenterBuilders() -> [ChatItemType: [ChatItemPresenterBuilderProtocol]] {
-        let textMessagePresenter = TextMessagePresenterBuilder(
-            viewModelBuilder: DemoTextMessageViewModelBuilder(),
-            interactionHandler: GenericMessageHandler(baseHandler: self.baseMessageHandler)
-        )
-        textMessagePresenter.baseMessageStyle = BaseMessageCollectionViewCellAvatarStyle()
-
-        let photoMessagePresenter = PhotoMessagePresenterBuilder(
-            viewModelBuilder: DemoPhotoMessageViewModelBuilder(),
-            interactionHandler: GenericMessageHandler(baseHandler: self.baseMessageHandler)
-        )
-        photoMessagePresenter.baseCellStyle = BaseMessageCollectionViewCellAvatarStyle()
-
-        let compoundPresenterBuilder = CompoundMessagePresenterBuilder(
-            viewModelBuilder: DemoCompoundMessageViewModelBuilder(),
-            interactionHandler: GenericMessageHandler(baseHandler: self.baseMessageHandler),
-            accessibilityIdentifier: nil,
-            contentFactories: [
-                .init(DemoTextMessageContentFactory()),
-                .init(DemoImageMessageContentFactory()),
-                .init(DemoDateMessageContentFactory())
-            ],
-            compoundCellDimensions: .defaultDimensions,
-            baseCellStyle: BaseMessageCollectionViewCellAvatarStyle()
-        )
-
-        return [
-            DemoTextMessageModel.chatItemType: [textMessagePresenter],
-            DemoPhotoMessageModel.chatItemType: [photoMessagePresenter],
-            SendingStatusModel.chatItemType: [SendingStatusPresenterBuilder()],
-            TimeSeparatorModel.chatItemType: [TimeSeparatorPresenterBuilder()],
-            ChatItemType.compoundItemType: [compoundPresenterBuilder]
-        ]
+        return chatItemPresenterBuilders
     }
 
+    func addRandomIncomingMessage() {
+        viewModel
+            .onRandomIncomingMessage
+            .onNext(dataSource.addRandomIncomingMessage())
+    }
+}
+
+// MARK: - Create Input Items
+
+private extension DemoChatViewController {
     func createChatInputItems() -> [ChatInputItemProtocol] {
-        var items = [ChatInputItemProtocol]()
-        items.append(createTextInputItem())
-        
-        items.append(createPhotoInputItem())
-        if shouldUseAlternativePresenter {
-            items.append(customInputItem())
-        }
-        
-        return items
+        return [createTextInputItem(), createPhotoInputItem()]
     }
-
-    private func createTextInputItem() -> TextChatInputItem {
-        let item = TextChatInputItem()
-        item.textInputHandler = { [weak self] text in
-            self?.dataSource.addTextMessage(text)
-        }
-        return item
-    }
-
-    private func createPhotoInputItem() -> PhotosChatInputItem {
+    
+    func createPhotoInputItem() -> ChatInputItemProtocol {
         let item = PhotosChatInputItem(presentingController: self)
-        item.photoInputHandler = { [weak self] image, _ in
-            self?.dataSource.addPhotoMessage(image)
+        item.photoInputHandler = { [unowned self] image, resource in
+            self.viewModel
+                .onImageMessageAdded
+                .onNext(self.dataSource.addPhotoMessage(image))
         }
         return item
     }
-
-    private func customInputItem() -> ContentAwareInputItem {
+    
+    func createTextInputItem() -> TextChatInputItem {
+        let item = TextChatInputItem()
+        
+        item.textInputHandler = { [unowned self] text in
+            self.viewModel
+                .onTextMessageAdded
+                .onNext(self.dataSource.addTextMessage(text))
+        }
+        return item
+    }
+    
+    func customInputItem() -> ContentAwareInputItem {
         let item = ContentAwareInputItem()
-        item.textInputHandler = { [weak self] text in
-            self?.dataSource.addTextMessage(text)
+        item.textInputHandler = { [unowned self] text in
+            self.viewModel
+                .onTextMessageAdded
+                .onNext(self.dataSource.addTextMessage(text))
         }
         return item
     }
 }
+
+// MARK: - Message Selector Delegate
 
 extension DemoChatViewController: MessagesSelectorDelegate {
     func messagesSelector(
         _ messagesSelector: MessagesSelectorProtocol,
         didSelectMessage: MessageModelProtocol
-    ) { enqueueModelUpdate(updateType: .normal) }
+    ) {
+        guard let messageModel = didSelectMessage
+            as? DemoPhotoMessageModel else { return }
+        viewModel
+            .onDidSelectMessage
+            .onNext(messageModel |> viewModel.showImagePreview)
+    }
 
     func messagesSelector(
         _ messagesSelector: MessagesSelectorProtocol,
         didDeselectMessage: MessageModelProtocol
-    ) { enqueueModelUpdate(updateType: .normal) }
+    ) {
+        viewModel
+            .onDidDeselectMessage
+            .onNext(enqueueModelUpdate(updateType: .normal))
+    }
 }
+
+// MARK: - Dimensions
 
 extension CompoundBubbleLayoutProvider.Dimensions {
     static var defaultDimensions: CompoundBubbleLayoutProvider.Dimensions {
